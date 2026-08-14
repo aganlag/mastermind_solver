@@ -1,3 +1,6 @@
 *.data
 *.data.*
 *.out
+vis.bash
+histograms/
+visualizer.py
