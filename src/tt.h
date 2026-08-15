@@ -1,0 +1,37 @@
+#pragma once
+#include "logic.h"
+#include <stdlib.h>
+
+
+typedef struct {
+    uint64_t hash;
+    code_t   code;
+} tt_entry_plain_t;
+
+
+#ifdef _OPENMP
+typedef _Atomic tt_entry_plain_t tt_entry_t;
+#else
+typedef tt_entry_plain_t tt_entry_t;
+#endif
+
+#define TT_TOTAL_ENTRIES 1000000
+
+tt_entry_t* TT;
+uint64_t*   zobrist;
+
+
+void init_zobrist_arr()
+{
+    int total_codes = ipow(ALLOWED_DIGITS, CODE_LEN);
+    zobrist         = malloc(sizeof(uint64_t) * total_codes);
+    for (int c1 = 0; c1 < total_codes; c1++) {
+        zobrist[c1] = ((uint64_t) rand() << 32) | rand();
+    }
+}
+
+static inline void init_TT()
+{
+    // TT = calloc(TT_TOTAL_ENTRIES, sizeof(tt_entry_t));
+    TT = malloc(TT_TOTAL_ENTRIES * sizeof(tt_entry_t));
+}

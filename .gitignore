@@ -1,6 +1,8 @@
 *.data
 *.data.*
 *.out
+nongringe.py
+visualizer.py
 vis.bash
 histograms/
-visualizer.py
+build/
