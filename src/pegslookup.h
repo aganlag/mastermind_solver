@@ -5,7 +5,6 @@
 
 #if (ALLOWED_DIGITS <= 9) && (CODE_LEN <= 4)
     #define PEGS_LOOKUP_ON
-    #pragma message "Using pegs lookup"
 #endif
 
 

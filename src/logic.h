@@ -3,11 +3,13 @@
 #include <stdint.h>
 
 
+#define MAX_TRIES   20
 #define unlikely(x) __builtin_expect(!!(x), 0)
+#define likely(x)   __builtin_expect(!!(x), 1)
 
 
 typedef double   m_float_t;
-typedef uint16_t code_t;
+typedef uint64_t code_t;
 
 
 #ifndef ALLOWED_DIGITS

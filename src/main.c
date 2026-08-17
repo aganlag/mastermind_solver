@@ -1,29 +1,47 @@
 #include "logic.h"
 #include "one_step_greedy_solver.h"
-#include "tt.h"
-#include "pegslookup.h"
 
+#include <stdint.h>
 #include <stdio.h>
 
-#define DEBUG_VAL_L(X)    printf("val: %d line: %d\n", (X), __LINE__);
-#define DEBUG_VAL(MSG, X) printf(#MSG ": %d\n", (X));
-#define PRINT_MACRO(X)    printf(#X ": %d\n", (X));
 
+#ifdef DIAGNOSTICS
+    #include "diagnostics.h"
+    #pragma message("Diagnostics ON")
+#endif
+
+#ifdef PEGS_LOOKUP_ON
+    #include "pegslookup.h"
+    #pragma message("Pegs Lookup ON")
+#endif
+
+#ifdef _OPENMP
+    #pragma message("Multithreading ON")
+    #define MULTITHREADING 1
+#else
+    #define MULTITHREADING 0
+#endif
+
+#if TT_TOTAL_ENTRIES > 0
+    #include "tt.h"
+    #pragma message("TT ON")
+#endif
 
 int main()
 {
-
     int starting_len = ipow(ALLOWED_DIGITS, CODE_LEN);
-
 #ifdef PEGS_LOOKUP_ON
     init_pegs_lookup();
 #endif
+
+#if TT_TOTAL_ENTRIES > 0
     init_zobrist_arr();
     init_TT();
+#endif
 
-
-    // Run the solver for all these configuration, could be smarter and run (each START X each SECRETS) and pick theti
-    // START that gets the lowest average number of moves. As is i just run the computation of the else below.
+    // Run the solver for all these configuration, could be smarter and run (each START X each SECRETS) and pick
+    // theti START that gets the lowest average number of moves. As is i just run the computation of the else
+    // below.
     code_t cached_first_guesses[20][20] = {
 #include "../cached_first_guesses.txt"
     };
@@ -46,9 +64,8 @@ int main()
     printf("[%d][%d] = %d, \n", ALLOWED_DIGITS, CODE_LEN, first_guess);
     return 0;
 #endif
-
-    int total       = 0;
-    int buckets[10] = { 0 };
+    int total              = 0;
+    int buckets[MAX_TRIES] = { 0 };
 
 #pragma omp parallel
     {
@@ -66,9 +83,12 @@ int main()
             pegs_status_t pegs  = { 0 };
 
             int tries = 0;
-
             while (true) {
                 tries++;
+#ifdef DIAGNOSTICS
+    #pragma omp atomic update
+                DIAGNOSTICS_STATS.cumultaive_candidates_pop[tries] += candidates.len;
+#endif
                 pegs = set_pegs(guess, secret);
                 if (pegs.correct == CODE_LEN)
                     break;
@@ -77,23 +97,45 @@ int main()
 #pragma omp atomic update
             buckets[tries]++;
             total += tries;
-            // printf("%d %d %d\n", secret, starting_len, tries);
         }
     }
+
+
+#pragma omp barrier
+    float avg_try = (m_float_t) total / (m_float_t) starting_len;
+#ifdef DIAGNOSTICS
+    float avg_pop[MAX_TRIES]     = { 0 };
+    float avg_entropy[MAX_TRIES] = { 0 };
+    float avg_winrate[MAX_TRIES] = { 0 };
+
+    float total_pop = starting_len;
+    for (size_t i = 1; i < (sizeof(buckets) / sizeof(buckets[0])); i++) {
+        avg_pop[i]     = (float) DIAGNOSTICS_STATS.cumultaive_candidates_pop[i] / total_pop;
+        avg_winrate[i] = buckets[i] / total_pop;
+        avg_entropy[i] = log2(avg_pop[i]);
+        total_pop -= buckets[i];
+        if (total_pop <= 0) {
+            break;
+        }
+    }
+    PRINT_VAR(ALLOWED_DIGITS)
+    PRINT_VAR(CODE_LEN)
+    PRINT_ARR(buckets);
+    PRINT_ARR(avg_entropy);
+    PRINT_ARR(avg_pop);
+    PRINT_ARR(avg_winrate);
+    PRINT_VAR(MULTITHREADING);
+    print_tt_diagnostics();
+#endif
 
 #ifdef PEGS_LOOKUP_ON
     free(PEGS_LOOKUP);
 #endif
-    // printf("\n");
-    // for (int i = 1; i < 10; i++) {
-    //    printf("%d ", buckets[i]);
-    //}
-    // printf("\n");
-    //
-    // printf("%f\n", (m_float_t) total / (m_float_t) starting_len);
-    // printf("%d\n", ALLOWED_DIGITS);
-    // printf("%d\n", CODE_LEN);
 
+#if TT_TOTAL_ENTRIES > 0
     free(TT);
+#endif
+
+    printf("AVG TRY: %f\n\n", avg_try);
     return 0;
 }

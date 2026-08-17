@@ -1,11 +1,10 @@
 
-ADDITIONAL_CFLAGS ?= ""
+ADDITIONAL_CFLAGS := -DTT_TOTAL_ENTRIES=1000000 -DALLOWED_DIGITS=6 -DCODE_LEN=5 -DDIAGNOSTICS -fopenmp
 CC := gcc
-CFLAGS := -g -O3 -march=native -Wextra -Wall -Wundef -flto -funroll-loops -ftree-vectorize -ffast-math -fopenmp -mcx16 -lm -lmvec -latomic
+CFLAGS := -g -O3 -march=native -Wextra -Wall -Wundef -flto -funroll-loops -ftree-vectorize -ffast-math -mcx16 -lm -lmvec -latomic 
 EXECUTABLE := a.out
 
 TEST_EXECUTABLE := test.out
-
 
 
 SRCDIR := ./src/

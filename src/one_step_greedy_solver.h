@@ -1,13 +1,21 @@
 #pragma once
 #include "logic.h"
 #include "pegslookup.h"
-#include "tt.h"
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef _OPENMP
     #include <stdatomic.h>
     #include <omp.h>
+#endif
+
+#ifdef DIAGNOSTICS
+    #include "diagnostics.h"
+#endif
+
+#if TT_TOTAL_ENTRIES > 0
+    #include "tt.h"
 #endif
 
 #define NO_HISTORY -1
@@ -33,24 +41,24 @@ static inline bool compare_pegs(pegs_status_t p1, pegs_status_t p2)
     return (p1.correct == p2.correct) && (p1.misplaced == p2.misplaced);
 }
 
-#ifdef PEGS_LOOKUP_ON
-    #define GET_PEGS(c1, c2) PEGS_LOOKUP[(c1) + (c2) * (int) ipow(ALLOWED_DIGITS, CODE_LEN)]
-#else
-    #define GET_PEGS(c1, c2) set_pegs((c1), (c2))
-#endif
-
-
 static inline code_t solver(candidates_arr_t* c, pegs_status_t last_peg_status, code_t last_guessed_code)
 {
 
-    uint64_t hash        = 0;
-    int      total_codes = ipow(ALLOWED_DIGITS, CODE_LEN);
+#if TT_TOTAL_ENTRIES > 0
+    uint64_t hash = 0;
+#endif
 
-    tt_entry_plain_t curr_entry;
+    int total_codes = ipow(ALLOWED_DIGITS, CODE_LEN);
+
+
+#ifdef DIAGNOSTICS
+    #pragma omp atomic update
+    DIAGNOSTICS_STATS.total_solver_call++;
+#endif
 
 
     // filtering stage is skipped if no codes are yet guessed
-    if (last_peg_status.correct != NO_HISTORY) {
+    if (likely(last_peg_status.correct != NO_HISTORY)) {
 
         for (int i = 0; i < c->len; i++) {
 
@@ -62,26 +70,40 @@ static inline code_t solver(candidates_arr_t* c, pegs_status_t last_peg_status, 
                 code_t tmp     = c->arr[i];
                 c->arr[i--]    = c->arr[--c->len];
                 c->arr[c->len] = tmp;
-
-            } else {
-                // we incrementally update the hash of this state if the code is in the alive candidate set
-                hash ^= zobrist[c->arr[i]];
+                continue;
             }
-        }
-#ifdef _OPENMP
-        curr_entry = atomic_load(&TT[hash % TT_TOTAL_ENTRIES]);
-#else
-        curr_entry = TT[hash % TT_TOTAL_ENTRIES];
+#if TT_TOTAL_ENTRIES > 0
+            // we incrementally update the hash of this state if the code is in the alive candidate set
+            hash ^= zobrist[c->arr[i]];
+            // hash ^= mix64(c->arr[i]);
 #endif
-        if (curr_entry.hash == hash) {
-
-            return curr_entry.code;
         }
     }
 
 
+#if TT_TOTAL_ENTRIES > 0
+    tt_entry_plain_t curr_entry = { 0 };
+    #ifdef _OPENMP
+    curr_entry = atomic_load(&TT[hash % TT_TOTAL_ENTRIES]);
+    #else
+    curr_entry = TT[hash % TT_TOTAL_ENTRIES];
+    #endif
+    if (curr_entry.hash == hash) {
+    #ifdef DIAGNOSTICS
+        #pragma omp atomic update
+        DIAGNOSTICS_STATS.TT_hits++;
+    #endif
+        return curr_entry.code;
+    }
+#endif
+
     m_float_t best_score = 666666666;  // big number
     code_t    best_guess = 0;
+
+#ifdef DIAGNOSTICS
+    #pragma omp atomic update
+    DIAGNOSTICS_STATS.total_codes_checked += (total_codes * c->len);
+#endif
 
     for (int i = 0; i < total_codes; i++) {
 
@@ -130,14 +152,25 @@ static inline code_t solver(candidates_arr_t* c, pegs_status_t last_peg_status, 
         }
     }
 
+#if TT_TOTAL_ENTRIES > 0
     tt_entry_plain_t new_entry = { .hash = hash, .code = best_guess };
 
-    if (unlikely(last_peg_status.correct != NO_HISTORY)) {
-#ifdef _OPENMP
+    if (likely(last_peg_status.correct != NO_HISTORY)) {
+
+    #ifdef DIAGNOSTICS
+        if (curr_entry.hash != 0) {
+        #pragma omp atomic update
+            DIAGNOSTICS_STATS.TT_collisions++;
+        }
+    #endif
+
+    #ifdef _OPENMP
         atomic_store(&TT[hash % TT_TOTAL_ENTRIES], new_entry);
-#else
+    #else
         TT[hash % TT_TOTAL_ENTRIES] = new_entry;
-#endif
+    #endif
     }
+#endif
+
     return best_guess;
 }
