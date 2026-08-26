@@ -3,7 +3,7 @@
 #include "logic.h"
 #include <stdlib.h>
 
-#if (ALLOWED_DIGITS <= 9) && (CODE_LEN <= 4)
+#if (ALLOWED_DIGITS <= 8) && (CODE_LEN <= 5)
     #define PEGS_LOOKUP_ON
 #endif
 
@@ -31,7 +31,7 @@ static inline void init_pegs_lookup()
 }
 
 #ifdef PEGS_LOOKUP_ON
-    #define GET_PEGS(c1, c2) PEGS_LOOKUP[(c1) + (c2) * (int) ipow(ALLOWED_DIGITS, CODE_LEN)]
+    #define GET_PEGS(c1, c2, total_codes) PEGS_LOOKUP[(c1) * total_codes + (c2)]
 #else
-    #define GET_PEGS(c1, c2) set_pegs((c1), (c2))
+    #define GET_PEGS(c1, c2, total_codes) set_pegs((c1), (c2))
 #endif

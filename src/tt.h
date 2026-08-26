@@ -11,21 +11,14 @@
 typedef struct {
     uint64_t hash;
     code_t   code;
-} tt_entry_plain_t;
-
-
-#ifdef _OPENMP
-typedef _Atomic tt_entry_plain_t tt_entry_t;
-#else
-typedef tt_entry_plain_t tt_entry_t;
-#endif
+} tt_entry_t;
 
 #ifndef TT_TOTAL_ENTRIES
     #define TT_TOTAL_ENTRIES 20000
 #endif
 
-tt_entry_t* TT;
-uint64_t*   zobrist;
+_Atomic(tt_entry_t)* TT;
+uint64_t*            zobrist;
 
 
 void init_zobrist_arr()
@@ -56,5 +49,5 @@ static inline uint64_t mix64(uint64_t x)
 static inline void init_TT()
 {
     // TT = calloc(TT_TOTAL_ENTRIES, sizeof(tt_entry_t));
-    TT = calloc(TT_TOTAL_ENTRIES, sizeof(tt_entry_t));
+    TT = calloc(TT_TOTAL_ENTRIES, sizeof(*TT));
 }
