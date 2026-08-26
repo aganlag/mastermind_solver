@@ -31,7 +31,7 @@ static inline void init_pegs_lookup()
 }
 
 #ifdef PEGS_LOOKUP_ON
-    #define GET_PEGS(c1, c2) PEGS_LOOKUP[(c1) + (c2) * (int) ipow(ALLOWED_DIGITS, CODE_LEN)]
+    #define GET_PEGS(c1, c2) PEGS_LOOKUP[(c1) * (int) ipow(ALLOWED_DIGITS, CODE_LEN) + (c2)]
 #else
     #define GET_PEGS(c1, c2) set_pegs((c1), (c2))
 #endif

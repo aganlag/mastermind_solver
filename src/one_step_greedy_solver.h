@@ -41,11 +41,35 @@ static inline bool compare_pegs(pegs_status_t p1, pegs_status_t p2)
     return (p1.correct == p2.correct) && (p1.misplaced == p2.misplaced);
 }
 
+static inline float approx_log2(float a)
+{
+    typedef union {
+        float    f;
+        uint32_t b;
+    } bits_t;
+
+    bits_t x = { .f = a };
+
+    int32_t exp = ((x.b >> 23) & 0xFF) - 127;
+    bits_t  m   = { .b = (x.b & 0x007FFFFF) | (127u << 23) };
+
+    // quadratic approximation
+    // float logm = -0.3369f * m.f * m.f + 1.995f * m.f - 1.649f;
+    float logm = m.f * (-0.3369f * m.f + 1.995f) - 1.649f;
+    // linear approximation
+    // float logm = 0.9843f * m.f - 0.9191f;
+
+    return exp + logm;
+}
+
+
 static inline code_t solver(candidates_arr_t* c, pegs_status_t last_peg_status, code_t last_guessed_code)
 {
 
 #if TT_TOTAL_ENTRIES > 0
-    uint64_t hash = 0;
+    uint64_t         hash       = 0;
+    tt_entry_plain_t curr_entry = { 0 };
+
 #endif
 
     int total_codes = ipow(ALLOWED_DIGITS, CODE_LEN);
@@ -82,55 +106,55 @@ static inline code_t solver(candidates_arr_t* c, pegs_status_t last_peg_status, 
 
 
 #if TT_TOTAL_ENTRIES > 0
-    tt_entry_plain_t curr_entry = { 0 };
+    if (likely(last_peg_status.correct != NO_HISTORY)) {
     #ifdef _OPENMP
-    curr_entry = atomic_load(&TT[hash % TT_TOTAL_ENTRIES]);
+        curr_entry = atomic_load(&TT[hash % TT_TOTAL_ENTRIES]);
     #else
-    curr_entry = TT[hash % TT_TOTAL_ENTRIES];
+        curr_entry = TT[hash % TT_TOTAL_ENTRIES];
     #endif
-    if (curr_entry.hash == hash) {
+        if (curr_entry.hash == hash) {
     #ifdef DIAGNOSTICS
         #pragma omp atomic update
-        DIAGNOSTICS_STATS.TT_hits++;
+            DIAGNOSTICS_STATS.TT_hits++;
     #endif
-        return curr_entry.code;
+            return curr_entry.code;
+        }
     }
 #endif
 
-    m_float_t best_score = 666666666;  // big number
-    code_t    best_guess = 0;
 
 #ifdef DIAGNOSTICS
     #pragma omp atomic update
     DIAGNOSTICS_STATS.total_codes_checked += (total_codes * c->len);
 #endif
 
+    m_float_t best_score = 666666666;  // big number
+    code_t    best_guess = 0;
+
+
     for (int i = 0; i < total_codes; i++) {
 
-        m_float_t curr_score                          = 0;
-        int       buckets[CODE_LEN + 1][CODE_LEN + 1] = { 0 };
+        m_float_t curr_score = 0;
+
+
+        uint16_t buckets[CODE_LEN + 1][CODE_LEN + 1] = { 0 };
+
 
         for (int j = 0; j < c->len; j++) {
             pegs_status_t bucket_i = GET_PEGS(c->arr[i], c->arr[j]);
-            buckets[bucket_i.correct][bucket_i.misplaced] += 1;
-        }
-
-        for (int k = 0; k < CODE_LEN + 1; k++) {
-            for (int h = 0; h < CODE_LEN + 1; h++) {
-                if (buckets[k][h] == 0) {
-                    continue;
-                }
-
-                // The original formula was sum log2(n) * (n / N) but we can avoid the multiplication by 1/N and
-                // keep the same ordering, sum log2(n) * n, this makes the formula somewhat less intuitive.
-                curr_score += log2((m_float_t) buckets[k][h]) * (m_float_t) buckets[k][h];
-
-                // Same here
-                // curr_score += (FLOAT) buckets[k][h] * (FLOAT) buckets[k][h];
+            int           visits   = ++buckets[bucket_i.correct][bucket_i.misplaced];
+            float         prev_ent = (visits - 1) == 0 ? 0 : approx_log2(visits - 1) * (visits - 1);
+            float         new_ent  = approx_log2(visits) * visits;
+            curr_score += new_ent - prev_ent;
+            if (curr_score > best_score) {
+                break;
             }
         }
 
-
+        if (curr_score < best_score || (curr_score == best_score && c->arr[i] < best_guess && i < c->len)) {
+            best_score = curr_score;
+            best_guess = c->arr[i];
+        }
         // Without the additional conditions the solver always prefers the smallest index, so a different ordering
         // means a different policy (in case of ties). To avoid inconsistencies, it's better to make the
         // tie-breaking policy fully explicit.
@@ -144,12 +168,6 @@ static inline code_t solver(candidates_arr_t* c, pegs_status_t last_peg_status, 
         // enter a loop. We could solve this by making the len == 1 case explicit above, but having this condition
         // here makes it so in ties alive candidates are always preferred over dead ones thus giving always a chance
         // to the solver to finish the game early.
-
-
-        if (curr_score < best_score || (curr_score == best_score && c->arr[i] < best_guess && i < c->len)) {
-            best_score = curr_score;
-            best_guess = c->arr[i];
-        }
     }
 
 #if TT_TOTAL_ENTRIES > 0
