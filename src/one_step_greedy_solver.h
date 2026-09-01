@@ -30,7 +30,7 @@ static inline candidates_arr_t init_candidates_array()
 
 static inline bool compare_pegs(pegs_status_t p1, pegs_status_t p2)
 {
-    return (p1.correct == p2.correct) && (p1.misplaced == p2.misplaced);
+    return p1.bits == p2.bits;
 }
 
 static inline float approx_log2(float a)
@@ -63,7 +63,7 @@ static inline uint64_t filter_candidates(candidates_arr_t* c, pegs_status_t last
     uint64_t hash = 0;
     for (int i = 0; i < c->len; i++) {
 
-        if (!compare_pegs(last_peg_status, GET_PEGS(c->arr[i], last_guessed_code, total_codes))) {
+        if (last_peg_status.bits != GET_PEGS(c->arr[i], last_guessed_code, total_codes).bits) {
             // The idea is to always keep the array sorted like this:
             // alive candidates [0       ... arr.len     - 1]
             // dead  candidates [arr.len ... total_codes - 1]
@@ -87,47 +87,47 @@ static inline code_t solver(candidates_arr_t* c)
     int total_codes = ipow(ALLOWED_DIGITS, CODE_LEN);
 
 
-    m_float_t best_score = 666666666666;  // big number
-    code_t    best_guess = 0;
+    float  best_score = INFINITY;  // big number
+    code_t best_guess = 0;
 
-    if (c->len == 1) {
+    if (unlikely(c->len == 1)) {
         return c->arr[0];
+    } else if (unlikely(c->len == 2)) {
+        return c->arr[0] > c->arr[1] ? c->arr[1] : c->arr[0];
     }
 
+    int tot_b = ((CODE_LEN + 1) * (CODE_LEN + 1) + (CODE_LEN + 1)) / 2 - 1;
 
     for (int i = 0; i < total_codes; i++) {
 
-        m_float_t curr_score = 0;
-
         uint16_t buckets[CODE_LEN + 1][CODE_LEN + 1] = { 0 };
+        float    curr_score                          = 0;
 
-        float_t bound = c->len * approx_log2(1.f);
 
         for (int j = 0; j < c->len; j++) {
 
-            // int r = (c->len - (j + 1));
+            // under this threshold we can try to cut, i dont know what this threshold should be...
+            // if (unlikely(c->len <= tot_b)) {
+            //    int r = (c->len - (j + 1));
+            //    // optimistic estimate
+            //    float estimate = ((float) r / (float) tot_b) * approx_log2((float) r / (float) tot_b);
             //
-            ////  loose bound
-            //// integer bound not faster coz its expensive
-            // int   q        = r / TOT_B;
-            // int   rem      = r % TOT_B;
-            // float estimate = (TOT_B - rem) * q * approx_log2(q) + rem * (q + 1) * approx_log2(q + 1);
-            //
-            //// less tight but faster
-            //// float estimate = ((float_t) r / (float_t) TOT_B) * approx_log2((float_t) r / (float_t) TOT_B);
-            //
-            // if (unlikely(estimate + curr_score > best_score)) {
-            //    curr_score += estimate;
-            //    break;
+            //    if (estimate + curr_score > best_score) {
+            //        curr_score += estimate;
+            //        break;
+            //    }
             //}
 
             pegs_status_t bucket_i = GET_PEGS(c->arr[i], c->arr[j], total_codes);
-            int           visits   = ++buckets[bucket_i.correct][bucket_i.misplaced];
-            float         prev_ent = (visits - 1 > 0) * approx_log2(visits - 1) * (visits - 1);
-            float         new_ent  = approx_log2(visits) * visits;
-            curr_score += new_ent - prev_ent;
+            int           visits   = ++buckets[bucket_i.correct][bucket_i.missplaced];
 
-            if (curr_score <= bound) { }
+            // no need to check for 0 because approx_log_2 returns -127 on log2(0) and it gets cancelled out by * 0
+            // float prev_ent = approx_log2(visits - 1) * (visits - 1);
+            // float new_ent  = approx_log2(visits) * visits;
+
+            float delta_approx = approx_log2(visits * 0.5) + 1 / 0.69314718056;
+            curr_score += delta_approx;
+
 
             if (curr_score > best_score) {
                 break;
@@ -150,6 +150,11 @@ static inline code_t solver(candidates_arr_t* c)
         if (curr_score < best_score || (curr_score == best_score && c->arr[i] < best_guess && i < c->len)) {
             best_score = curr_score;
             best_guess = c->arr[i];
+
+            // we found a score we cant improve on, rather cheap check and potentially extremely beneficial.
+            if (unlikely(best_score <= 0)) {
+                return best_guess;
+            }
         }
     }
     return best_guess;

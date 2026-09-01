@@ -21,8 +21,6 @@ uint64_t* PACK_CODES;
     #define CODE_LEN 4
 #endif
 
-#define TOT_B ((CODE_LEN + 1) * (CODE_LEN + 1) + (CODE_LEN + 1)) / 2 - 1
-
 // arguably very bad
 #define SCAN_DIGIT_MOD_DIV(X) \
     ({ \
@@ -39,9 +37,15 @@ uint64_t* PACK_CODES;
     })
 
 
-typedef struct {
-    int8_t correct;
-    int8_t misplaced;
+typedef union {
+
+    struct {
+        int8_t correct;
+        int8_t missplaced;
+    };
+
+    int16_t bits;
+
 } pegs_status_t;
 
 
@@ -62,15 +66,15 @@ static inline pegs_status_t set_pegs(code_t c1, code_t c2)
     int_fast8_t counter[ALLOWED_DIGITS] = { 0 };
 
 
-    // uint64_t p_c1 = PACK_CODES[c1];
-    // uint64_t p_c2 = PACK_CODES[c2];
+    uint64_t p_c1 = PACK_CODES[c1];
+    uint64_t p_c2 = PACK_CODES[c2];
     for (int i = 0; i < CODE_LEN; i++) {
 
-        int d1 = SCAN_DIGIT_MOD_DIV(c1);
-        int d2 = SCAN_DIGIT_MOD_DIV(c2);
+        // int d1 = SCAN_DIGIT_MOD_DIV(c1);
+        // int d2 = SCAN_DIGIT_MOD_DIV(c2);
 
-        // int d1 = SCAN_DIGIT_AND_SHIFT(p_c1);
-        // int d2 = SCAN_DIGIT_AND_SHIFT(p_c2);
+        int d1 = SCAN_DIGIT_AND_SHIFT(p_c1);
+        int d2 = SCAN_DIGIT_AND_SHIFT(p_c2);
 
 
         if (unlikely(d1 == d2)) {
@@ -78,10 +82,10 @@ static inline pegs_status_t set_pegs(code_t c1, code_t c2)
         } else {
 
             if (counter[d1]++ < 0) {
-                pegs.misplaced++;
+                pegs.missplaced++;
             }
             if (counter[d2]-- > 0) {
-                pegs.misplaced++;
+                pegs.missplaced++;
             }
         }
     }

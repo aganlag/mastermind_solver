@@ -27,10 +27,10 @@ int main()
     int starting_len = ipow(ALLOWED_DIGITS, CODE_LEN);
 
 
-    // PACK_CODES = malloc(starting_len * sizeof(*PACK_CODES));
-    // for (int c = 0; c < starting_len; c++) {
-    //     PACK_CODES[c] = pack_code(c);
-    // }
+    PACK_CODES = malloc(starting_len * sizeof(*PACK_CODES));
+    for (int c = 0; c < starting_len; c++) {
+        PACK_CODES[c] = pack_code(c);
+    }
 
 
 #ifdef PEGS_LOOKUP_ON
@@ -75,7 +75,7 @@ int main()
     {
         candidates_arr_t candidates = init_candidates_array();
 
-#pragma omp for reduction(+ : total)
+#pragma omp for schedule(dynamic, 100) reduction(+ : total)
         for (int c = 0; c < starting_len; c++) {
 
             // only possible because of how we are filtering the array
@@ -99,8 +99,6 @@ int main()
                 tt_entry_t curr_ttentry = TT[hash % TT_TOTAL_ENTRIES];
 
 
-                // we just shouldnt continue this we know that downstream each decision is the same...
-                // but how do we recover the score...
                 if (curr_ttentry.hash == hash) {
                     guess = curr_ttentry.code;
                 } else {
