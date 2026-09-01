@@ -1,5 +1,5 @@
 #include "logic.h"
-#include "one_step_greedy_solver.h"
+#include "one_step_greedy_solver_SIMD.h"
 
 #include <stdint.h>
 #include <stdio.h>
