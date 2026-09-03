@@ -10,6 +10,13 @@
 #include "tt.h"
 #include <immintrin.h>
 
+typedef union {
+    float    arr_f[8];
+    uint32_t arr_ui[8];
+    __m256   data;
+} simd_block;
+
+
 typedef struct {
     code_t* arr;
     int     len;
@@ -87,17 +94,11 @@ static inline float approx_log2(float a)
     return exp + logm;
 }
 
-typedef union {
-    float  arr[8];
-    __m256 data;
-} simd_block;
-
 
 static inline code_t solver(candidates_arr_t* c)
 {
 
     int total_codes = ipow(ALLOWED_DIGITS, CODE_LEN);
-
 
     float  best_score = 666666666.0f;  // big number
     code_t best_guess = 0;
@@ -120,7 +121,7 @@ static inline code_t solver(candidates_arr_t* c)
             for (int k = 0; k < 8; k++) {
                 // possible win with GET_PEGS returning vector
                 pegs_status_t bucket_i = GET_PEGS(c->arr[i], c->arr[j + k], total_codes);
-                delta.arr[k]           = ++buckets[bucket_i.correct][bucket_i.missplaced];
+                delta.arr_f[k]         = ++buckets[bucket_i.correct][bucket_i.missplaced];
             }
 
             // no need to check for 0 because approx_log_2 returns -127 on log2(0) and it gets cancelled out by * 0
@@ -155,7 +156,8 @@ static inline code_t solver(candidates_arr_t* c)
             pegs_status_t bucket_i = GET_PEGS(c->arr[i], c->arr[j], total_codes);
             int           visits   = ++buckets[bucket_i.correct][bucket_i.missplaced];
 
-            float delta_approx = approx_log2(visits - 0.5) + 1 / 0.69314718056;
+            const float one_over_ln2 = 1.44269504089f;
+            float       delta_approx = approx_log2(visits - 0.5) + one_over_ln2;
             curr_score += delta_approx;
 
 
